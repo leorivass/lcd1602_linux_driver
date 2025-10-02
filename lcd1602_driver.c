@@ -4,6 +4,12 @@
 #include <linux/cdev.h>  
 #include <linux/device.h> 
 #include <linux/i2c.h>
+#include <linux/delay.h>
+
+#define EN_OFF_MASK 0xFB
+#define HIGH_NIBBLE_MASK 0xF0
+#define LOW_NIBBLE_MASK 0x0F
+#define WRITE_INSTRUCTION_MASK 0xC
 
 #define DEVICE_NAME "lcd1602_1"
 #define CLASS_NAME "lcd1602"
@@ -41,6 +47,57 @@ static const struct file_operations fops = {
     .owner = THIS_MODULE
 
 };
+
+static void lcd_send_command(u8 command) {
+
+    u8 data = WRITE_INSTRUCTION_MASK;
+    data |= (command & HIGH_NIBBLE_MASK);
+
+    i2c_smbus_write_byte(lcd1602_client, data);
+    i2c_smbus_write_byte(lcd1602_client, data & EN_OFF_MASK); 
+
+    data = WRITE_INSTRUCTION_MASK;
+    data |= (command & LOW_NIBBLE_MASK) << 4;
+
+    i2c_smbus_write_byte(lcd1602_client, data);
+    i2c_smbus_write_byte(lcd1602_client, data & EN_OFF_MASK);
+    udelay(40);
+
+    return;
+}
+
+static void lcd1602_initialization(void) {
+
+    i2c_smbus_write_byte(lcd1602_client, 0x3C);
+    i2c_smbus_write_byte(lcd1602_client, 0x3C & EN_OFF_MASK);
+    mdelay(5);
+    i2c_smbus_write_byte(lcd1602_client, 0x3C);
+    i2c_smbus_write_byte(lcd1602_client, 0x3C & EN_OFF_MASK);
+    udelay(200);
+    i2c_smbus_write_byte(lcd1602_client, 0x3C);
+    i2c_smbus_write_byte(lcd1602_client, 0x3C & EN_OFF_MASK);
+    udelay(40);
+
+    /* Set interface data length to 4-bit */
+    i2c_smbus_write_byte(lcd1602_client, 0x2C); 
+    i2c_smbus_write_byte(lcd1602_client, 0x2C & EN_OFF_MASK);
+    udelay(40);
+
+    /* Set number of display lines to 2 and character font to 5x8 */
+    lcd_send_command(0x28);
+
+    /* Set display on, cursor on and blinking cursor off */
+    lcd_send_command(0xE);
+
+    /* Clear display */
+    lcd_send_command(0x01);
+    mdelay(2);
+
+    /* Set entry mode: increment cursor, no display shift */
+    lcd_send_command(0x06);
+
+    return;
+}
 
 static int lcd1602_probe(struct i2c_client *client) {
 
@@ -112,6 +169,9 @@ static int lcd1602_probe(struct i2c_client *client) {
 		ret = PTR_ERR(lcd1602_device);
         goto err_class_destroy;
 	}
+
+    mdelay(16);
+    lcd1602_initialization();
 
     pr_info("lcd1602_driver - Driver initialized successfully with major number = %d\n", MAJOR(devt));
 
