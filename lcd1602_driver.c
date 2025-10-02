@@ -5,11 +5,13 @@
 #include <linux/device.h> 
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/uaccess.h>
 
 #define EN_OFF_MASK 0xFB
 #define HIGH_NIBBLE_MASK 0xF0
 #define LOW_NIBBLE_MASK 0x0F
 #define WRITE_INSTRUCTION_MASK 0xC
+#define WRITE_DATA_MASK 0xD
 
 #define DEVICE_NAME "lcd1602_1"
 #define CLASS_NAME "lcd1602"
@@ -43,20 +45,15 @@ static struct i2c_driver lcd1602_driver_info = {
     }
 };
 
-static const struct file_operations fops = {
-    .owner = THIS_MODULE
+static void lcd_send_byte(u8 RW_RS_MASK, u8 command) {
 
-};
-
-static void lcd_send_command(u8 command) {
-
-    u8 data = WRITE_INSTRUCTION_MASK;
+    u8 data = RW_RS_MASK;
     data |= (command & HIGH_NIBBLE_MASK);
 
     i2c_smbus_write_byte(lcd1602_client, data);
     i2c_smbus_write_byte(lcd1602_client, data & EN_OFF_MASK); 
 
-    data = WRITE_INSTRUCTION_MASK;
+    data = RW_RS_MASK;
     data |= (command & LOW_NIBBLE_MASK) << 4;
 
     i2c_smbus_write_byte(lcd1602_client, data);
@@ -65,6 +62,42 @@ static void lcd_send_command(u8 command) {
 
     return;
 }
+
+static void lcd_send_command(u8 command) {
+    lcd_send_byte(WRITE_INSTRUCTION_MASK, command);
+}
+
+static void lcd_write_character(u8 command) {
+    lcd_send_byte(WRITE_DATA_MASK, command);
+}
+
+static ssize_t lcd_write_messages(struct file *filp, const char __user *user_buffer, size_t len, loff_t *off) {
+
+    char kernel_buffer[16];
+    int copied, not_copied, to_copy = min(len, sizeof(kernel_buffer));
+
+    /* Clear display */
+    lcd_send_command(0x01);
+    mdelay(2);
+    
+    /* Return home */
+    lcd_send_command(0x02);
+    mdelay(2); 
+
+    not_copied = copy_from_user(kernel_buffer, user_buffer, to_copy);
+    copied = to_copy - not_copied;
+
+    for(int i = 0; i < copied; i++) {
+        lcd_write_character(kernel_buffer[i]);
+    }
+
+    return copied;
+}
+
+static const struct file_operations fops = {
+    .owner = THIS_MODULE,
+    .write = lcd_write_messages
+};
 
 static void lcd1602_initialization(void) {
 
