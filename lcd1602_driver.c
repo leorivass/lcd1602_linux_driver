@@ -6,6 +6,7 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include "includes/lcd1602_ioctl.h"
 
 #define EN_OFF_MASK 0xFB
 #define HIGH_NIBBLE_MASK 0xF0
@@ -108,9 +109,55 @@ static ssize_t lcd_write_messages(struct file *filp, const char __user *user_buf
     return copied;
 }
 
+static long int ioctl_commands(struct file *filp, unsigned cmd, unsigned long arg) {
+
+    switch(cmd) {
+
+        case CLEAR_DISPLAY:
+            lcd_send_command(0x01);
+            mdelay(2);
+            break;
+
+        case SET_CURSOR_ON:
+            lcd_send_command(0xE);
+            break;
+        
+        case SET_CURSOR_OFF:
+            lcd_send_command(0xC);
+            break;
+
+        case SET_BLINKY_CURSOR_ON:
+            lcd_send_command(0xF);
+            break;
+        
+        case SET_BLINKY_CURSOR_OFF:
+            lcd_send_command(0xE);
+            break;
+
+        case SET_BACKLIGHT_ON:
+            i2c_smbus_write_byte(lcd1602_client, 0xC);
+            i2c_smbus_write_byte(lcd1602_client, 0xC & EN_OFF_MASK);
+            udelay(40);
+            break;
+
+        case SET_BACKLIGHT_OFF:
+            i2c_smbus_write_byte(lcd1602_client, 0x4);
+            i2c_smbus_write_byte(lcd1602_client, 0x4 & EN_OFF_MASK);
+            udelay(40);
+            break;
+        
+        default:
+            return -EINVAL;
+
+    }
+
+    return 0;
+}
+
 static const struct file_operations fops = {
     .owner = THIS_MODULE,
-    .write = lcd_write_messages
+    .write = lcd_write_messages,
+    .unlocked_ioctl = ioctl_commands
 };
 
 static void lcd1602_initialization(void) {
