@@ -72,23 +72,37 @@ static void lcd_write_character(u8 command) {
 }
 
 static ssize_t lcd_write_messages(struct file *filp, const char __user *user_buffer, size_t len, loff_t *off) {
-
-    char kernel_buffer[16];
+    
+    char kernel_buffer[32];
+    bool next_line = false;
     int copied, not_copied, to_copy = min(len, sizeof(kernel_buffer));
 
     /* Clear display */
     lcd_send_command(0x01);
     mdelay(2);
-    
-    /* Return home */
-    lcd_send_command(0x02);
-    mdelay(2); 
 
     not_copied = copy_from_user(kernel_buffer, user_buffer, to_copy);
     copied = to_copy - not_copied;
 
+    if (not_copied > 0) {
+        pr_warn("lcd1602_driver - %d bytes were not copied\n", not_copied);
+    }
+
     for(int i = 0; i < copied; i++) {
+
+        if (i == 16 && next_line == false) {
+            lcd_send_command(0xC0);
+            next_line = true;
+        }
+        
+        if (kernel_buffer[i] == '\n' && next_line == false) {
+            lcd_send_command(0xC0);
+            next_line = true;
+            continue;
+        }
+
         lcd_write_character(kernel_buffer[i]);
+
     }
 
     return copied;
