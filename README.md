@@ -84,3 +84,15 @@ gcc test.c
 ```
 sudo ./a.out
 ```
+
+## Contributing
+
+Feel free to submit issues, fork the repository, and create pull requests for any improvements.
+
+## License
+
+This project is licensed under the GPL v2 - see the `MODULE_LICENSE("GPL")` declaration in the source code.
+
+## Author
+
+**Carlos Rivas** - [leorivas1805@gmail.com](mailto:leorivas1805@gmail.com)
