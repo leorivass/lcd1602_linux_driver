@@ -6,13 +6,8 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include "includes/lcd1602_driver.h"
 #include "includes/lcd1602_ioctl.h"
-
-#define EN_OFF_MASK 0xFB
-#define HIGH_NIBBLE_MASK 0xF0
-#define LOW_NIBBLE_MASK 0x0F
-#define WRITE_INSTRUCTION_MASK 0xC
-#define WRITE_DATA_MASK 0xD
 
 #define DEVICE_NAME "lcd1602_1"
 #define CLASS_NAME "lcd1602"
@@ -92,12 +87,12 @@ static ssize_t lcd_write_messages(struct file *filp, const char __user *user_buf
     for(int i = 0; i < copied; i++) {
 
         if (i == 16 && next_line == false) {
-            lcd_send_command(0xC0);
+            lcd_send_command(LCD_CMD_DDRAM_ADDRESS | START_NEW_LINE);
             next_line = true;
         }
         
         if (kernel_buffer[i] == '\n' && next_line == false) {
-            lcd_send_command(0xC0);
+            lcd_send_command(LCD_CMD_DDRAM_ADDRESS | START_NEW_LINE);
             next_line = true;
             continue;
         }
@@ -114,35 +109,35 @@ static long int ioctl_commands(struct file *filp, unsigned cmd, unsigned long ar
     switch(cmd) {
 
         case CLEAR_DISPLAY:
-            lcd_send_command(0x01);
+            lcd_send_command(LCD_CMD_CLEAR_DISPLAY);
             mdelay(2);
             break;
 
         case SET_CURSOR_ON:
-            lcd_send_command(0xE);
+            lcd_send_command(LCD_CMD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_CURSOR_ON);
             break;
         
         case SET_CURSOR_OFF:
-            lcd_send_command(0xC);
+            lcd_send_command(LCD_CMD_DISPLAY_CONTROL | LCD_DISPLAY_ON);
             break;
 
         case SET_BLINKY_CURSOR_ON:
-            lcd_send_command(0xF);
+            lcd_send_command(LCD_CMD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_CURSOR_ON | LCD_BLINK_ON);
             break;
         
         case SET_BLINKY_CURSOR_OFF:
-            lcd_send_command(0xE);
+            lcd_send_command(LCD_CMD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_CURSOR_ON);
             break;
 
         case SET_BACKLIGHT_ON:
-            i2c_smbus_write_byte(lcd1602_client, 0xC);
-            i2c_smbus_write_byte(lcd1602_client, 0xC & EN_OFF_MASK);
+            i2c_smbus_write_byte(lcd1602_client, LCD_BACKLIGHT_ON);
+            i2c_smbus_write_byte(lcd1602_client, LCD_BACKLIGHT_ON & EN_OFF_MASK);
             udelay(40);
             break;
 
         case SET_BACKLIGHT_OFF:
-            i2c_smbus_write_byte(lcd1602_client, 0x4);
-            i2c_smbus_write_byte(lcd1602_client, 0x4 & EN_OFF_MASK);
+            i2c_smbus_write_byte(lcd1602_client, LCD_BACKLIGHT_OFF);
+            i2c_smbus_write_byte(lcd1602_client, LCD_BACKLIGHT_OFF & EN_OFF_MASK);
             udelay(40);
             break;
         
@@ -162,33 +157,34 @@ static const struct file_operations fops = {
 
 static void lcd1602_initialization(void) {
 
-    i2c_smbus_write_byte(lcd1602_client, 0x3C);
-    i2c_smbus_write_byte(lcd1602_client, 0x3C & EN_OFF_MASK);
+    /* Set interface data length to 8-bit */
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_8BIT_MODE);
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_8BIT_MODE & EN_OFF_MASK);
     mdelay(5);
-    i2c_smbus_write_byte(lcd1602_client, 0x3C);
-    i2c_smbus_write_byte(lcd1602_client, 0x3C & EN_OFF_MASK);
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_8BIT_MODE);
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_8BIT_MODE & EN_OFF_MASK);
     udelay(200);
-    i2c_smbus_write_byte(lcd1602_client, 0x3C);
-    i2c_smbus_write_byte(lcd1602_client, 0x3C & EN_OFF_MASK);
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_8BIT_MODE);
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_8BIT_MODE & EN_OFF_MASK);
     udelay(40);
 
     /* Set interface data length to 4-bit */
-    i2c_smbus_write_byte(lcd1602_client, 0x2C); 
-    i2c_smbus_write_byte(lcd1602_client, 0x2C & EN_OFF_MASK);
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_4BIT_MODE); 
+    i2c_smbus_write_byte(lcd1602_client, INTERFACE_4BIT_MODE & EN_OFF_MASK);
     udelay(40);
 
     /* Set number of display lines to 2 and character font to 5x8 */
-    lcd_send_command(0x28);
+    lcd_send_command(LCD_CMD_FUNCTION_SET | LCD_2LINE);
 
     /* Set display on, cursor on and blinking cursor off */
-    lcd_send_command(0xE);
+    lcd_send_command(LCD_CMD_DISPLAY_CONTROL | LCD_DISPLAY_ON | LCD_CURSOR_ON);
 
     /* Clear display */
-    lcd_send_command(0x01);
+    lcd_send_command(LCD_CMD_CLEAR_DISPLAY);
     mdelay(2);
 
     /* Set entry mode: increment cursor, no display shift */
-    lcd_send_command(0x06);
+    lcd_send_command(LCD_CMD_ENTRY_MODE_SET | LCD_ENTRY_INCREMENT);
 
     return;
 }
